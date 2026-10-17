@@ -95,11 +95,17 @@ git checkout -- demo_repo/calculator.py   # if tracked
 
 ### 3. Live mode (Nebius Token Factory)
 
+Live mode needs **both** `NEBIUS_API_KEY` and the `--live` flag. Dry-run is the default and does not call Token Factory.
+
 ```bash
 cp .env.example .env
-# edit .env: set NEBIUS_API_KEY=... and REPOFORGE_DRY_RUN=0
+# Put NEBIUS_API_KEY in .env only. Do not commit the key.
 python -m repoforge --live "fix failing tests in ./demo_repo"
 ```
+
+If `NEBIUS_API_KEY` is unset, RepoForge stays on the mock LLM even when you pass `--live`.
+
+In live mode the edit phase forces the `apply_edit` tool (`tool_choice`) so Nemotron applies a patch instead of only listing or reading files. The test phase forces `run_tests`. Pytest runs with its working directory set to the target repo root (for example `demo_repo/`), and does not adopt a parent package `pyproject.toml`.
 
 ### 4. Web UI
 

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RepoForge</title>
+  <style>
+    :root { font-family: ui-sans-serif, system-ui, sans-serif; color: #e8eef7; background: #0b1220; }
+    body { max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-weight: 700; letter-spacing: -0.02em; }
+    .sub { color: #8aa0bf; margin-bottom: 1.5rem; }
+    label { display: block; margin: 0.75rem 0 0.25rem; font-size: 0.9rem; color: #a8bdd9; }
+    input, textarea { width: 100%; box-sizing: border-box; background: #121a2b; border: 1px solid #24304a; color: #e8eef7; border-radius: 8px; padding: 0.65rem 0.75rem; }
+    button { margin-top: 1rem; background: #3d7eff; color: white; border: 0; border-radius: 8px; padding: 0.7rem 1.2rem; font-weight: 600; cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    pre { background: #121a2b; border: 1px solid #24304a; border-radius: 8px; padding: 1rem; overflow: auto; font-size: 0.85rem; }
+    .ok { color: #5ddea8; } .fail { color: #ff8e8e; }
+  </style>
+</head>
+<body>
+  <h1>RepoForge</h1>
+  <p class="sub">Plan → explore → edit → test → reflect · NVIDIA Nemotron via Nebius Token Factory</p>
+  <label for="repo">Local repo path</label>
+  <input id="repo" value="./demo_repo" />
+  <label for="task">Task</label>
+  <textarea id="task" rows="3">fix failing tests</textarea>
+  <label><input type="checkbox" id="dry" checked /> Dry-run (mock LLM)</label>
+  <br />
+  <button id="go">Run agent</button>
+  <h2>Result</h2>
+  <pre id="out">Idle.</pre>
+  <script>
+    const out = document.getElementById('out');
+    document.getElementById('go').onclick = async () => {
+      const btn = document.getElementById('go');
+      btn.disabled = true; out.textContent = 'Running…';
+      try {
+        const res = await fetch('/api/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            repo: document.getElementById('repo').value,
+            task: document.getElementById('task').value,
+            dry_run: document.getElementById('dry').checked,
+          }),
+        });
+        const data = await res.json();
+        out.innerHTML = '';
+        const line = document.createElement('div');
+        line.className = data.success ? 'ok' : 'fail';
+        line.textContent = `success=${data.success} mock=${data.mock}\n${data.summary}`;
+        out.appendChild(document.createTextNode(JSON.stringify(data, null, 2)));
+      } catch (e) {
+        out.textContent = String(e);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>

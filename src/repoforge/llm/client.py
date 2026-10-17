@@ -36,10 +36,19 @@ class LLMClient:
         temperature: float = 0.2,
         max_tokens: int = 2048,
         tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Return a normalized response dict with content / tool_calls / model."""
+        """Return a normalized response dict with content / tool_calls / model.
+
+        ``tool_choice`` is forwarded to the OpenAI SDK (for example
+        ``{"type": "function", "function": {"name": "apply_edit"}}``).
+        Nano on Token Factory often answers with prose or the wrong tool
+        unless a specific function is required.
+        """
         if self.settings.use_mock:
-            return MockLLMClient().chat(messages, tier=tier, tools=tools)
+            return MockLLMClient().chat(
+                messages, tier=tier, tools=tools, tool_choice=tool_choice
+            )
 
         assert self._client is not None
         model = self.settings.model_for(tier)
@@ -51,6 +60,8 @@ class LLMClient:
         }
         if tools:
             kwargs["tools"] = tools
+        if tool_choice is not None:
+            kwargs["tool_choice"] = tool_choice
         resp = self._client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
         msg = choice.message

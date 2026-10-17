@@ -20,7 +20,11 @@ class MockLLMClient:
         *,
         tier: Tier = "nano",
         tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        # tool_choice is accepted so the live client and the mock share a
+        # signature. The scripted demo already emits the phase's tool call.
+        del tool_choice
         self._step += 1
         last_user = _last_role(messages, "user")
         last_system = _last_role(messages, "system")

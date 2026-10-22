@@ -1,171 +1,81 @@
 # RepoForge
 
-**A coding agent that plans, explores, patches, and tests — powered by NVIDIA Nemotron via Nebius Token Factory.**
+A small coding agent that works on **your** repository: give it a repo path and a task in plain English, and it plans, reads code, edits files, and runs the tests — in a loop you can watch.
 
-> Devpost one-liner: RepoForge is a coding agent that plans with NVIDIA Nemotron Ultra/Super, explores your repo, writes patches, runs tests in a sandbox, and iterates until green — via Nebius Token Factory.
+Built for the Nebius × Global AI Hackathon using NVIDIA Nemotron models on Nebius Token Factory. Ships with a deterministic mock model, so the demo runs without an API key.
 
-Built for the **Nebius × NVIDIA Global AI Hackathon** (Coding & Agentic Engineering Track).  
-License: **MIT**.
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python -m repoforge run --repo ./demo_repo --task "Fix the failing tests in calculator.py" --dry-run
+```
+
+`demo_repo/` contains a deliberately buggy calculator, so the first run does something visible.
 
 ---
 
-## Why RepoForge?
-
-IDE autocomplete helps you type. Chatbots wait for you to paste files. RepoForge takes a **repo + natural-language task** and runs a closed loop:
-
-**plan → explore → edit → test → reflect**
-
-…routing cheap **Nemotron Nano** for exploration and **Super / Ultra** for hard planning and recovery — all through Nebius Token Factory’s OpenAI-compatible API.
-
-## Features (MVP)
-
-- CLI: `python -m repoforge --dry-run "fix failing tests in ./demo_repo"`
-- FastAPI + minimal web UI (`/`, `/api/run`, `/health`)
-- Tool sandbox: `list_dir`, `read_file`, `search_text`, `apply_edit`, `run_tests`
-- Model router: Nano / Super / Ultra
-- **Dry-run / mock mode** — works with no API key (CI-friendly)
-- Tavily research tool **stub** (bonus-track ready)
-- Intentional `demo_repo/` with a failing test for demos
-
-## Architecture
+## How it works
 
 ```
-┌─────────────┐     ┌──────────────────┐     ┌─────────────────────────┐
-│ CLI / Web   │────▶│  Agent Loop      │────▶│ Nebius Token Factory    │
-│ FastAPI     │     │  plan→…→reflect  │     │ Nemotron Nano/Super/Ultra│
-└─────────────┘     └────────┬─────────┘     └─────────────────────────┘
-                             │
-                             ▼
-                    ┌────────────────┐
-                    │ Tools + Pytest │
-                    │ git sandbox    │
-                    └────────────────┘
+task ──► planner ──► explore (tools) ──► edit ──► run tests ──► done / retry
+                    └────────── Nemotron tiers ──────────┘
 ```
 
-See [PLAN.md](./PLAN.md) for the full product plan, sprint calendar, and judging mapping.
+Three model tiers are routed by phase: Nano for file exploration, Super for editing, Ultra for the plan and for recovery after a failed test run. Edits and test runs use forced `tool_choice`, so the model must act rather than chat.
 
-## How Nemotron & Token Factory are used
+Tools are scoped to the target repo:
 
-| Role | Model (Token Factory id) | When |
-|------|--------------------------|------|
-| Fast explore / tool calls | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | explore, test, easy edits |
-| Planning & recovery | `nvidia/nemotron-3-super-120b-a12b` | default plan, reflect after failures |
-| Hard reasoning | `nvidia/Nemotron-3-Ultra-550b-a55b` | architecture / security / concurrency tasks |
+| Tool | Purpose |
+|---|---|
+| `list_dir` | list a directory |
+| `read_file` | read a file |
+| `search_text` | grep across the repo |
+| `apply_edit` | write a file |
+| `run_tests` | run pytest with cwd set to the target repo |
 
-Client: official `openai` Python SDK with
-
-```text
-base_url = https://api.tokenfactory.nebius.com/v1/
-api_key  = $NEBIUS_API_KEY
-```
-
-Set `REPOFORGE_DRY_RUN=1` (default) to use the deterministic mock LLM — no network, no key.
-
-## Quick start
-
-### 1. Install
+## Web UI
 
 ```bash
-cd repoforge
-python3.11 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-# or: pip install -r requirements.txt && pip install -e .
+uvicorn repoforge.api.routes:app --reload
+# http://127.0.0.1:8000
 ```
 
-### 2. Dry-run demo (no API key)
-
-```bash
-# Confirm demo_repo tests are red
-python -m pytest demo_repo -q || true
-
-# Run the agent (mock LLM fixes calculator.add)
-python -m repoforge --dry-run "fix failing tests in ./demo_repo"
-
-# Tests should now be green
-python -m pytest demo_repo -q
-```
-
-Reset the bug anytime:
-
-```bash
-git checkout -- demo_repo/calculator.py   # if tracked
-# or restore the intentional bug line: return a - b
-```
-
-### 3. Live mode (Nebius Token Factory)
-
-Live mode needs **both** `NEBIUS_API_KEY` and the `--live` flag. Dry-run is the default and does not call Token Factory.
-
-```bash
-cp .env.example .env
-# Put NEBIUS_API_KEY in .env only. Do not commit the key.
-python -m repoforge --live "fix failing tests in ./demo_repo"
-```
-
-If `NEBIUS_API_KEY` is unset, RepoForge stays on the mock LLM even when you pass `--live`.
-
-In live mode the edit phase forces the `apply_edit` tool (`tool_choice`) so Nemotron applies a patch instead of only listing or reading files. The test phase forces `run_tests`. Pytest runs with its working directory set to the target repo root (for example `demo_repo/`), and does not adopt a parent package `pyproject.toml`.
-
-### 4. Web UI
-
-```bash
-python -m repoforge serve
-# open http://127.0.0.1:8000
-```
-
-### 5. Project tests
-
-```bash
-python -m pytest tests -q
-```
-
-## Project layout
-
-```text
-repoforge/
-├── PLAN.md                 # Internal plan (ZH) + Devpost one-liner
-├── README.md               # This file (EN, submission)
-├── LICENSE                 # MIT
-├── pyproject.toml
-├── requirements.txt
-├── .env.example
-├── demo_repo/              # Intentional failing tests
-├── src/repoforge/
-│   ├── cli.py              # Typer CLI
-│   ├── config.py
-│   ├── agent/              # loop, router, planner
-│   ├── llm/                # Token Factory client + mock
-│   ├── tools/              # fs, search, edit, tests, tavily stub
-│   └── api/                # FastAPI routes
-├── tests/
-└── web/index.html
-```
+`POST /api/run` starts a run, `GET /health` reports readiness. The page in `web/index.html` is a thin console over the same API.
 
 ## Configuration
 
-| Variable | Default | Meaning |
-|----------|---------|---------|
-| `NEBIUS_API_KEY` | empty | Token Factory key |
-| `NEBIUS_BASE_URL` | `https://api.tokenfactory.nebius.com/v1/` | API base |
-| `NEBIUS_MODEL_NANO` / `_SUPER` / `_ULTRA` | see `.env.example` | Model ids |
-| `REPOFORGE_DRY_RUN` | `1` | Mock LLM if `1` or key missing |
-| `TAVILY_API_KEY` | empty | Optional research (stubbed) |
+Copy `.env.example` to `.env`:
 
-## Roadmap (post-MVP)
+```
+NEBIUS_API_KEY=...
+REPOFORGE_MODEL_PLAN=...
+```
 
-- Clone GitHub URLs into isolated worktrees
-- Open PR drafts from successful runs
-- Real Tavily research in the plan phase
-- Broader test runners (Go, Rust, Node)
-- Evaluation suite of public bugfix tasks
+Missing key → mock mode. `--dry-run` forces mock mode even when a key is present.
+
+## Project layout
+
+```
+src/repoforge/
+  agent/    loop, planner, router
+  llm/      client, mock
+  tools/    filesystem, search, edit, tests
+  api/      FastAPI routes
+tests/      5 test modules
+demo_repo/  buggy sample project
+```
+
+```bash
+pytest
+```
+
+## Known limits
+
+- **Not a security sandbox.** `run_tests` executes the target repo's tests in a copied working directory, not a container. Point it at code you trust.
+- Single-repo, single-task runs — no multi-agent parallelism, no long-horizon memory.
+- Web search exists as an interface but is a stub.
+- No benchmark numbers yet; the loop is validated by the demo repo's tests, not by a public eval.
 
 ## License
 
-[MIT](./LICENSE) © 2026 RepoForge Contributors
-
-## Acknowledgments
-
-- [Nebius Token Factory](https://tokenfactory.nebius.com/)
-- [NVIDIA Nemotron](https://www.nvidia.com/) model family
-- Hackathon: Nebius × NVIDIA Global AI Hackathon
+MIT.
